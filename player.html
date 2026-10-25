@@ -1,0 +1,60 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>クイズ大会</title>
+<style>
+:root{--ink:#172033;--bg:#eef2f9;--card:#fff;--b:#2f5fa8}
+@media(prefers-color-scheme:dark){:root{--ink:#eef2f9;--bg:#0f1824;--card:#1b2838}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:14px;padding-top:max(14px,env(safe-area-inset-top));font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink)}
+.top{display:flex;justify-content:space-between}
+.pill{background:var(--b);color:#fff;border-radius:99px;padding:6px 16px;font-size:1.2rem;font-weight:800}
+.bar{height:14px;border-radius:9px;background:rgba(127,127,127,.25);margin:12px 0;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:#f2b01e;transition:width .25s linear}
+.card{background:var(--card);border-radius:20px;padding:20px;margin:12px 0;box-shadow:0 2px 10px rgba(0,0,0,.1);font-size:1.5rem;font-weight:800;line-height:1.5}
+.card small{font-size:1rem;opacity:.7}
+.t{display:flex;gap:14px;align-items:center;width:100%;min-height:78px;margin:10px 0;padding:14px 16px;border:0;border-radius:18px;color:#fff;font:inherit;font-size:1.4rem;font-weight:800;text-align:left}
+.t b{flex:none;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.28);display:grid;place-items:center}
+.t:disabled{opacity:.4}.t.me:disabled{opacity:1;outline:5px solid var(--ink)}
+.c0{background:#c8433f}.c1{background:#2f5fa8}.c2{background:#b98512}.c3{background:#2f8a52}
+input{width:100%;font:inherit;font-size:1.4rem;padding:16px;border-radius:16px;border:2px solid var(--b);background:var(--card);color:var(--ink)}
+.res{border-radius:24px;padding:30px 16px;margin:16px 0;color:#fff;text-align:center}
+.ok{background:#2f8a52}.ng{background:#c8433f}
+.big{font-size:3.2rem;font-weight:900}.pt{font-size:2.2rem;font-weight:800;margin-top:6px}
+.sub{text-align:center;font-size:1.2rem;opacity:.8}
+</style></head><body><div id="v"></div>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getDatabase,ref,set,onValue,serverTimestamp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+const cfg={apiKey:"AIzaSyD4hOMWOfEy-RmuIMYCH8fI3tXvNijKjgI",authDomain:"quiz-competition-f04d6.firebaseapp.com",databaseURL:"https://quiz-competition-f04d6-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"quiz-competition-f04d6",appId:"1:272062892984:web:359306a22f7cb27de25d4d"};
+const db=getDatabase(initializeApp(cfg)),v=document.getElementById("v");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=ms=>(Math.round(ms/100)/10).toFixed(1);
+let id,name,off=0,g={phase:"lobby"},done=-1,pick=-1,tm;
+try{id=localStorage.qid;name=localStorage.qname}catch(e){}
+function watch(){onValue(ref(db,"players/"+id),s=>{if(!s.exists())set(ref(db,"players/"+id),{name})})}
+if(id&&name)watch();
+onValue(ref(db,".info/serverTimeOffset"),s=>off=s.val()||0);
+onValue(ref(db,"game"),s=>{g=s.val()||{phase:"lobby"};if(g.phase==="lobby")done=-1;render()});
+function render(){
+ clearInterval(tm);
+ if(!name){v.innerHTML='<div class="card" style="text-align:center">ニックネームを入力してね</div><input id="n" maxlength="12" placeholder="ニックネーム"><button class="t c1" id="go" style="justify-content:center;margin-top:16px">参加する</button>';
+  go.onclick=()=>{name=n.value.trim();if(!name)return;id="p"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+   try{localStorage.qid=id;localStorage.qname=name}catch(e){}set(ref(db,"players/"+id),{name});watch();render()};return}
+ const me=(g.board||[]).findIndex(b=>b.id===id),b=g.board&&g.board[me];
+ if(g.phase==="question"){
+  const ans=done===g.q;
+  v.innerHTML='<div class="top"><span class="pill">'+(g.q+1)+" / "+g.n+'</span><span class="pill" id="sec"></span></div><div class="bar"><i id="bi"></i></div><div class="card">'+esc(g.question.text)+"</div>"+
+   g.question.choices.map((c,i)=>'<button class="t c'+i+(ans&&pick===i?" me":"")+'" data-i="'+i+'"'+(ans?" disabled":"")+"><b>"+"ABCD"[i]+"</b>"+esc(c)+"</button>").join("")+
+   (ans?'<p class="sub">回答しました!結果を待ってね</p>':"");
+  v.querySelectorAll("button").forEach(x=>x.onclick=()=>{done=g.q;pick=+x.dataset.i;set(ref(db,"answers/"+g.q+"/"+id),{c:pick,at:serverTimestamp()});render()});
+  const tick=()=>{const l=g.limit-(Date.now()+off-g.startedAt)/1000;sec.textContent=l>0?Math.ceil(l)+"秒":"終了";bi.style.width=Math.max(0,100*l/g.limit)+"%";if(l<=0)v.querySelectorAll("button").forEach(x=>x.disabled=true)};
+  tick();tm=setInterval(tick,250);
+ }else if(g.phase==="reveal"){
+  const hit=b&&b.hit;
+  v.innerHTML='<div class="res '+(hit?"ok":"ng")+'"><div class="big">'+(hit?"正解!":"残念…")+"</div>"+'</div><div class="card"><small>正解は</small><div class="t c'+g.correct+'" style="margin:10px 0 0;font-size:1.7rem"><b>'+"ABCD"[g.correct]+"</b>"+esc(g.question.choices[g.correct])+'</div></div><p class="sub">次の問題までお待ちください</p>';
+ }else if(g.phase==="final"){
+  v.innerHTML='<div class="res ok"><div class="big">'+(b?"あなたは "+(me+1)+"位":"最終結果")+"</div>"+(b?'<div class="pt">'+b.pt+"ポイント</div><div class=sub style=color:#fff>正解 "+b.ok+"問(合計"+fmt(b.ms)+"秒)</div>":"")+"</div>"+
+   '<p class="sub" style="font-size:1rem">順位は正解数が多い順。同じ正解数のときは、合計の回答時間が短い順です。</p>'+(g.board||[]).map((x,i)=>'<div class="card" style="font-size:1.15rem;padding:12px 16px'+(i===me?";outline:4px solid var(--b)":"")+'"><div style="display:flex;gap:10px"><span>'+(i<3?["🥇","🥈","🥉"][i]:(i+1)+"位")+'</span><span style="flex:1">'+esc(x.name)+"</span><span>"+x.pt+'ポイント</span></div><div style="font-size:.95rem;font-weight:600;opacity:.75">正解 '+x.ok+"問(合計"+fmt(x.ms)+"秒)</div></div>").join("");
+ }else v.innerHTML='<div class="res ok"><div class="big" style="font-size:2rem">'+esc(name)+' さん</div><div class="pt" style="font-size:1.5rem">参加OK!</div></div><p class="sub">開始までお待ちください</p>';
+}
+render();
+</script></body></html>

@@ -1,0 +1,68 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>クイズ 司会者用</title>
+<style>
+:root{--bg:#f3f6fb;--t:#17212e;--b:#2f5fa8}
+@media(prefers-color-scheme:dark){:root{--bg:#121c28;--t:#eaf1f9;--b:#7aa6e6}}
+body{margin:0;padding:20px;font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--t)}
+#row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+#qr{background:#fff;padding:8px;display:inline-block}
+button{font:inherit;font-size:1.2rem;font-weight:700;padding:14px 28px;border-radius:12px;border:0;background:var(--b);color:#fff}
+#q{font-size:1.8rem;font-weight:800;margin:12px 0}
+td{padding:4px 14px}
+</style></head><body>
+<div id="row"><div><h1>クイズ 司会者用</h1><div id="qr"></div><p id="url"></p></div>
+<div style="flex:1;min-width:280px"><p id="st"></p><div id="q"></div><button id="main"></button><table id="bd"></table></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getDatabase,ref,set,remove,onValue,serverTimestamp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+// ▼ FirebaseのfirebaseConfigをここに貼る(player.htmlと同じもの)
+const cfg={apiKey:"AIzaSyD4hOMWOfEy-RmuIMYCH8fI3tXvNijKjgI",authDomain:"quiz-competition-f04d6.firebaseapp.com",databaseURL:"https://quiz-competition-f04d6-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"quiz-competition-f04d6",appId:"1:272062892984:web:359306a22f7cb27de25d4d"};
+// ▼ 問題はここだけ書き換える(c=選択肢4つ、a=正解の番号 0〜3)
+const LIMIT=15;
+const Q=[
+{t:"テスト問題1:日本の首都は?",c:["東京","大阪","京都","名古屋"],a:0},
+{t:"テスト問題2:1週間は何日?",c:["5日","6日","7日","8日"],a:2},
+{t:"テスト問題3:空の色(晴れの日)は?",c:["赤","青","緑","黒"],a:1},
+{t:"テスト問題4:1年は何か月?",c:["10","11","12","13"],a:2},
+{t:"テスト問題5:犬の鳴き声は?",c:["にゃー","わん","ぶー","こけこっこー"],a:1},
+{t:"テスト問題6:3+4は?",c:["6","7","8","9"],a:1},
+{t:"テスト問題7:一番大きな海は?",c:["太平洋","大西洋","インド洋","北極海"],a:0},
+{t:"テスト問題8:富士山があるのは?",c:["北海道","静岡・山梨","沖縄","福岡"],a:1},
+{t:"テスト問題9:信号の「進め」の色は?",c:["赤","黄","青(緑)","白"],a:2},
+{t:"テスト問題10:サッカーのチーム人数は?",c:["9人","10人","11人","12人"],a:2}];
+const db=getDatabase(initializeApp(cfg)),$=i=>document.getElementById(i);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let g={phase:"lobby"},pl={},ans={};
+const url=location.href.replace(/host\.html.*$/,"player.html");
+$("url").textContent=url;new QRCode($("qr"),{text:url,width:200,height:200});
+onValue(ref(db,"game"),s=>{g=s.val()||{phase:"lobby"};ui()});
+onValue(ref(db,"players"),s=>{pl=s.val()||{};ui()});
+onValue(ref(db,"answers"),s=>{ans=s.val()||{};ui()});
+async function next(){
+ const q=(g.q??-1)+1;if(q>=Q.length)return set(ref(db,"game"),{...g,phase:"final"});
+ await set(ref(db,"game"),{phase:"question",q,startedAt:serverTimestamp(),limit:LIMIT,question:{text:Q[q].t,choices:Q[q].c},board:g.board||[]});
+ setTimeout(()=>{if(g.q===q&&g.phase==="question")reveal()},LIMIT*1000+1500);
+}
+async function reveal(){
+ const q=g.q,A=ans[q]||{},prev={};(g.board||[]).forEach(b=>prev[b.id]=b);
+ const rows=Object.keys(pl).map(id=>{
+  const p=prev[id]||{total:0,ok:0,ms:0},a=A[id];let gain=0,hit=false,ms=0;
+  if(a){ms=Math.max(0,a.at-g.startedAt);hit=a.c===Q[q].a&&ms<=g.limit*1000+1500;
+   if(hit)gain=Math.round(1000*(1-Math.min(ms/(g.limit*1000),1)/2))}
+  return{id,name:pl[id].name,total:p.total+gain,ok:p.ok+(hit?1:0),ms:p.ms+(hit?ms:0),gain,hit};
+ }).sort((x,y)=>y.total-x.total||x.ms-y.ms);
+ await set(ref(db,"game"),{...g,phase:"reveal",correct:Q[q].a,board:rows});
+}
+async function reset(){await remove(ref(db,"answers"));await set(ref(db,"game"),{phase:"lobby"})}
+function ui(){
+ const n=Object.keys(pl).length,got=g.phase==="question"?Object.keys(ans[g.q]||{}).length:0;
+ $("st").textContent="参加者 "+n+"人"+(g.phase==="question"?" / 回答済み "+got+"人":"");
+ $("q").textContent=g.question?(g.q+1)+"/"+Q.length+" "+g.question.text:"";
+ const m=$("main"),last=g.q===Q.length-1;
+ const [label,fn]={lobby:["クイズ開始",next],question:["正解発表",reveal],reveal:[last?"最終結果":"次の問題へ",next],final:["最初からやり直す",reset]}[g.phase];
+ m.textContent=label;m.onclick=fn;
+ $("bd").innerHTML=(g.board||[]).slice(0,10).map((b,i)=>"<tr><td>"+(i+1)+"位</td><td>"+esc(b.name)+"</td><td>"+b.total+"点</td><td>正解"+b.ok+"問</td></tr>").join("");
+}
+ui();
+</script></body></html>

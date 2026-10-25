@@ -24,7 +24,7 @@ h1{margin:0;font-size:1.8rem}#st{font-size:1.4rem;font-weight:700;color:#f2b01e}
 <div id="lobby"><div id="qr"></div><p id="url"></p><p class="mid">QRコードを読み取って参加しよう!</p></div>
 <div id="play" style="display:none"><div class="bar"><i id="bar"></i></div><div id="q"></div><div id="ch"></div></div>
 <div id="fin" style="display:none"></div>
-<div class="ctl"><button id="main"></button><button id="rs">最初からやり直す</button><button id="dm" style="display:none;background:#4a5675;font-size:1rem;margin-left:12px">テスト用に参加者を28人追加</button></div></div>
+<div class="ctl"><button id="main"></button><button id="rs">最初からやり直す</button><button id="dm" style="display:none;background:#4a5675;font-size:1rem;margin-left:12px">テスト用に参加者を29人追加</button></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -72,7 +72,7 @@ async function reveal(){
 }
 async function reset(){await remove(ref(db,"answers"));await remove(ref(db,"players"));await set(ref(db,"game"),{phase:"lobby"})}
 setInterval(()=>{$("bar").style.width=g.phase==="question"?Math.max(0,100*(1-(Date.now()+off-g.startedAt)/(g.limit*1000)))+"%":"0"},250);
-if(true){const d=$("dm");d.style.display="";d.onclick=async()=>{for(let i=1;i<=28;i++)await set(ref(db,"players/dummy"+i),{name:"テスト"+i})}}
+if(true){const d=$("dm");d.style.display="";d.onclick=async()=>{for(let i=1;i<=29;i++)await set(ref(db,"players/dummy"+i),{name:"テスト"+i})}}
 $("rs").onclick=()=>{if(confirm("参加者・回答・得点をすべて消して、最初に戻します。よろしいですか?"))reset()};
 function ui(){
  const ph=g.phase,n=Object.keys(pl).length,got=ph==="question"?Object.keys(ans[g.q]||{}).length:0;
